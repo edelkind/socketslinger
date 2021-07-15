@@ -1,0 +1,74 @@
+sling-input
+===========
+
+Send a descriptor to another arbitrary process via UDS.
+
+Usage example:
+  socat TCP4-LISTEN:1234,fork EXEC:sling-input,nofork
+
+
+Operation:
+------------
+socket()
+bind("slinger.$$")
+listen()
+sd = accept()  # blocks waiting for socket to be caught.
+sendmsg(sd, 0) # send stdin, which is really bidirectional.
+exit(success)
+------------
+
+
+sling-catch
+===========
+
+Usage examples:
+  sling-catch sockname -- socat FD:5 STDIO
+  sling-catch sockname -i         # attach to stdio
+  sling-catch sockname -i -- cat  # attach to stdio and exec cat
+
+  (initially, only bother with first usage)
+
+Operation:
+------------
+main():
+    socket()
+    sd = connect(sockname)
+    unlink(sockname)   # always unlink, even if connect fails (for cleanup)
+
+    if !success(sd):
+        die()
+
+    call do_sock(sd)
+
+
+def do_sock(sd):
+    slungsock = recvmsg(sd)
+    if has_arg(-i):
+        set_fd(slungsock, 0)
+        dup2(0, 1)
+    else:
+        set_fd(slungsock, 5)  # just in case it isn't 5
+    exec(prog_args)           # exec of no return
+
+------------
+
+
+sling-watch
+===========
+
+Usage example:
+  sling-watch | while read sock; do
+    tmux new-window -- sling-catch -s $sock -- socat FD:5 STDIO
+  done
+
+Operation:
+------------
+dir = opendir(runtime_dir)
+for entry in dir:
+    if is_sock(entry):
+        print(entry)
+watcher = inotify(runtime_dir, IN_CREATE)
+while (entry = next(watcher)):
+    if (is_sock(entry)):
+        print(entry)
+------------

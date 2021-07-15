@@ -1,7 +1,9 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <unistd.h>
 
 #include "defaults.h"
 #include "descriptor.h"
@@ -29,13 +31,22 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    if (connect(sock_conn, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
+    for (unsigned tries = 0;; tries++) {
+        if (!connect(sock_conn, (struct sockaddr *)&sa, sizeof(sa)))
+            break;
+        if (errno == ECONNREFUSED) {
+            if (!(tries % 10))
+                fprintf(stderr, "Waiting for catcher to listen on socket...\n");
+            sleep(1);
+            continue;
+        }
         perror("connect");
         exit(1);
     }
 
-    if (desc_write(sock_conn, "", 1, 0) == -1 ||
-        desc_write(sock_conn, "", 1, 1) == -1) {
+//    if (desc_write(sock_conn, "", 1, 0) == -1 ||
+//        desc_write(sock_conn, "", 1, 1) == -1) {
+    if (desc_write(sock_conn, "", 1, 0) == -1) {
         perror("desc_write");
         exit(1);
     }
