@@ -1,5 +1,8 @@
+#include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+
+#include "descriptor.h"
 
 /* XXX: requires MSGHDR_MSG_CONTROL.  Consider porting to systems
  * that lack this but still allow descriptor passing.
@@ -67,4 +70,16 @@ ssize_t desc_read(int sd, void *msg_buf, size_t msg_sz, int *recv_desc) {
     *recv_desc = *((int*) CMSG_DATA(cmsg_ptr));
 
     return recv_len;
+}
+
+/* relay a descriptor to dual descriptors a la stdio.
+ *
+ * Normally, d_in and d_out would be 0 and 1 (i.e. actually stdio).
+ *
+ * Returns 0 on success, or -1 if a read/write error occurred.
+ */
+int desc_relay(int desc, int d_in, int d_out) {
+    // XXX: TODO  (should be impossible to get here until it's implemented)
+    fprintf(stderr, "Descriptor relaying to stdio (without a program to exec) is unimplemented.  Sorry.\n\n");
+    return -1;
 }

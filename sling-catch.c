@@ -7,9 +7,40 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <get_opts.h>
+
 #include "defaults.h"
 #include "descriptor.h"
 #include "path.h"
+#include "socket.h"
+
+void usage(void) {
+    fprintf(stderr,
+"sling-catch [opts] -s sockname -- cmd args...\n"
+"\n"
+"  -s, --sockname      Socket name to connect to (required)\n"
+"  -c, --cleanup       Clean up (remove) old sockets\n"
+"  -d, --descriptor D  Descriptor number to use (default 5)\n"
+"  -i, --stdio         Relay data from/to stdin/stdout\n"
+"  -r, --retry N       Retry for N milliseconds\n"
+"  -w, --wait N        Wait for N milliseconds between retries\n"
+"  -h, --help          Display usage help\n");
+    exit(1);
+}
+
+
+add_opt(opt_sockname,   "s",  "sockname", OPT_STRING, (opt_string_t)0, 0);
+add_opt(opt_descriptor, "d",  "descriptor", OPT_INT, (opt_int_t)5, 0);
+add_opt(opt_stdio,      "i",  "stdio", OPT_TOGGLE, (opt_toggle_t)0, 0); // TODO
+add_opt(opt_clean,      "c",  "cleanup", OPT_TOGGLE, (opt_toggle_t)0, 0);
+add_opt(opt_retry,      "r",  "retry", OPT_INT, (opt_int_t)0, 0); // TODO
+add_opt(opt_wait,       "w",  "wait", OPT_INT, (opt_int_t)0, 0);  // TODO
+add_opt(opt_help,       "h",  "help", OPT_TOGGLE, (opt_toggle_t)0, 0);
+
+
+put_opts(options, &opt_sockname, &opt_descriptor, &opt_stdio, &opt_clean,
+        &opt_retry, &opt_wait, &opt_help);
+
 
 static inline void set_fd(int dfrom, int dto) {
     if (dfrom == dto)
@@ -20,74 +51,79 @@ static inline void set_fd(int dfrom, int dto) {
     }
 }
 
-int main(int argc, char **argv) {
-    char *sockpath = get_socket_path();
-    size_t socklen = strlen(sockpath);
-    int sock_listen, sock_conn;
+static inline int opts_validate(void) {
+    if (!opt_sockname.v_opt.opt_string)
+        return 1;
 
-    struct sockaddr_un sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sun_family = AF_UNIX;
-    if (socklen >= (sizeof(sa.sun_path))) {
-        fprintf(stderr, "Socket path (%s) too long (%ld > %lu).\n",
-                sockpath, socklen, sizeof(sa.sun_path) - 1);
-        exit(1);
-    }
-    memcpy(sa.sun_path, sockpath, socklen); /* \0 already present */
-
-    sock_listen = socket(AF_UNIX, SOCK_SEQPACKET, 0);
-    if (sock_listen == -1) {
-        perror("socket");
-        exit(1);
+    /* TODO: retry/wait/stdio need implementation */
+    if (opt_retry.v_opt.opt_toggle || opt_wait.v_opt.opt_toggle) {
+        fprintf(stderr, "Not implemented.  Sorry.\n\n");
+        return 1;
     }
 
-    unlink(sockpath);
-    if (bind(sock_listen, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
-        perror("bind");
-        exit(1);
+    if (opt_stdio.v_opt.opt_toggle &&
+            (opt_descriptor.v_opt.opt_int == 0 ||
+             opt_descriptor.v_opt.opt_int == 1)) {
+        fprintf(stderr, "Can't relay to stdio if descriptor is 0 or 1.\n\n");
+        return 1;
     }
-
-    if (listen(sock_listen, 20) == -1) {
-        perror("listen");
-        exit(1);
-    }
-
-    sock_conn = accept(sock_listen, NULL, NULL);
-
-    char discard;
-    int d_stdio;
-    // int d_stdin;
-    // int d_stdout;
-    // if (desc_read(sock_conn, &discard, 1, &d_stdin) == -1 ||
-    //     desc_read(sock_conn, &discard, 1, &d_stdout) == -1) {
-    if (desc_read(sock_conn, &discard, 1, &d_stdio) == -1) {
-        perror("desc_read");
-        exit(1);
-    }
-    write (d_stdio, "stdout!\n", 8);
-
-    /* ensure that stdin and stdout are fds 5 and 6, respectively */
-    /*
-    set_fd(d_stdin, 5);
-    set_fd(d_stdout, 6);
-    */
-
-
-    // int fds[] = { d_stdin, d_stdout };
-    // for (int fd=0; fd <= 1; fd++) {
-    //     int flags = fcntl(fds[fd], F_GETFD);
-    //     if (flags == -1) {
-    //         perror("fcntl(fd, F_GETFD)");
-    //         continue;
-    //     }
-    //     flags &= ~FD_CLOEXEC;
-    //     if (fcntl(fds[fd], F_SETFD, flags) == -1) {
-    //         perror("fcntl(fd, F_SETFD, ...)");
-    //         continue;
-    //     }
-    // }
-    execlp("socat", "socat", "FD:5", "STDIO", NULL);
 
     return 0;
+}
+
+int main(int argc, char **argv) {
+    lx_s sockpath = {0};
+    int sock_conn;
+    char **args;
+    int argn;
+    int d_io;
+
+    argn = get_opts_errormatic(&args, argv+1, argc-1, options);
+    if (argn < 1 || opt_help.v_opt.opt_toggle || opts_validate())
+        usage();
+
+    if (build_socket_path_name(&sockpath, opt_sockname.v_opt.opt_string)) {
+        perror("build_socket_path_pid");
+        return 1;
+    }
+
+    sock_conn = socket_connect(sockpath.s, sockpath.len);
+    if (sock_conn < 0) {
+        perror("socket_connect");
+        if (opt_clean.v_opt.opt_toggle)
+            unlink(lx_cstr(&sockpath));
+        return 1;
+    }
+
+    {
+        char discard = 0;
+        if (desc_read(sock_conn, &discard, 1, &d_io) == -1) {
+            perror("desc_read");
+            exit(1);
+        }
+    }
+
+    if (opt_stdio.v_opt.opt_toggle && argn) {
+        /* --stdio AND exec */
+        set_fd(d_io, 0);
+        set_fd(d_io, 1);
+        if (d_io > 1)
+            close(d_io);
+    } else {
+        /* --descriptor */
+        if (d_io != opt_descriptor.v_opt.opt_int) {
+            set_fd(d_io, opt_descriptor.v_opt.opt_int);
+            close(d_io);
+            d_io = opt_descriptor.v_opt.opt_int;
+        }
+
+        /* --stdio WITHOUT exec (!argn) */
+        if (opt_stdio.v_opt.opt_toggle)
+            return desc_relay(d_io, 0, 1);
+
+    }
+
+    // execlp("socat", "socat", "FD:5", "STDIO", NULL);
+    return execvp(args[0], args);
 }
 

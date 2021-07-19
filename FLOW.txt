@@ -22,9 +22,9 @@ sling-catch
 ===========
 
 Usage examples:
-  sling-catch sockname -- socat FD:5 STDIO
-  sling-catch sockname -i         # attach to stdio
-  sling-catch sockname -i -- cat  # attach to stdio and exec cat
+  sling-catch -s sockname -- socat FD:5 STDIO
+  sling-catch -s sockname -i         # attach to stdio
+  sling-catch -s sockname -i -- cat  # attach to stdio and exec cat
 
   (initially, only bother with first usage)
 

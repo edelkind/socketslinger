@@ -1,8 +1,16 @@
 #ifndef _SLING_PATH_H
 #define _SLING_PATH_H
 
+#include <unistd.h>
+
+#include <lx_string.h>
+
+/* total size of sun_path, including \0 */
+#define SUN_PATH_SIZE sizeof(((struct sockaddr_un*)0)->sun_path)
+
 char *path_attach(const char *arg1, const char *arg2, const char *arg3);
 char *get_home(void);
-char *get_socket_path(void);
+int build_socket_path_pid(lx_s *dest, pid_t pid);
+int build_socket_path_name(lx_s *dest, const char *socketname);
 
 #endif // _SLING_PATH_H
