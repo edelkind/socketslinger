@@ -32,7 +32,7 @@ LDFLAGS = $(LXLIB_LDFLAGS) $(GETOPTS_LDFLAGS) $(MINILIB_LDFLAGS)
 #LDFLAGS = $(GLIB_LDFLAGS)
 
 
-PROGRAMS=sling-input sling-catch
+PROGRAMS=sling-input sling-catch sling-watch
 
 .c.o:
 	$(CC) -c $< $(CFLAGS)
@@ -43,6 +43,9 @@ sling-input: sling-input.o path.o descriptor.o socket.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 sling-catch: sling-catch.o path.o descriptor.o socket.o
+	$(CC) -o $@ $^ $(LDFLAGS)
+
+sling-watch: sling-watch.o path.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 clean:

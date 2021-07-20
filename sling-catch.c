@@ -21,9 +21,7 @@ void usage(void) {
 "  -s, --sockname      Socket name to connect to (required)\n"
 "  -c, --cleanup       Clean up (remove) old sockets\n"
 "  -d, --descriptor D  Descriptor number to use (default 5)\n"
-"  -i, --stdio         Relay data from/to stdin/stdout\n"
-"  -r, --retry N       Retry for N milliseconds\n"
-"  -w, --wait N        Wait for N milliseconds between retries\n"
+"  -i, --stdio         Redirect or relay from/to stdin/stdout\n"
 "  -h, --help          Display usage help\n");
     exit(1);
 }
@@ -33,13 +31,11 @@ add_opt(opt_sockname,   "s",  "sockname", OPT_STRING, (opt_string_t)0, 0);
 add_opt(opt_descriptor, "d",  "descriptor", OPT_INT, (opt_int_t)5, 0);
 add_opt(opt_stdio,      "i",  "stdio", OPT_TOGGLE, (opt_toggle_t)0, 0); // TODO
 add_opt(opt_clean,      "c",  "cleanup", OPT_TOGGLE, (opt_toggle_t)0, 0);
-add_opt(opt_retry,      "r",  "retry", OPT_INT, (opt_int_t)0, 0); // TODO
-add_opt(opt_wait,       "w",  "wait", OPT_INT, (opt_int_t)0, 0);  // TODO
 add_opt(opt_help,       "h",  "help", OPT_TOGGLE, (opt_toggle_t)0, 0);
 
 
 put_opts(options, &opt_sockname, &opt_descriptor, &opt_stdio, &opt_clean,
-        &opt_retry, &opt_wait, &opt_help);
+        &opt_help);
 
 
 static inline void set_fd(int dfrom, int dto) {
@@ -55,16 +51,10 @@ static inline int opts_validate(void) {
     if (!opt_sockname.v_opt.opt_string)
         return 1;
 
-    /* TODO: retry/wait/stdio need implementation */
-    if (opt_retry.v_opt.opt_toggle || opt_wait.v_opt.opt_toggle) {
-        fprintf(stderr, "Not implemented.  Sorry.\n\n");
-        return 1;
-    }
-
     if (opt_stdio.v_opt.opt_toggle &&
             (opt_descriptor.v_opt.opt_int == 0 ||
              opt_descriptor.v_opt.opt_int == 1)) {
-        fprintf(stderr, "Can't relay to stdio if descriptor is 0 or 1.\n\n");
+        fprintf(stderr, "Can't redirect to stdio if descriptor is 0 or 1.\n\n");
         return 1;
     }
 
@@ -96,7 +86,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        char discard = 0;
+        char discard;
         if (desc_read(sock_conn, &discard, 1, &d_io) == -1) {
             perror("desc_read");
             exit(1);

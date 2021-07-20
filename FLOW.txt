@@ -10,8 +10,11 @@ Usage example:
 Operation:
 ------------
 socket()
-bind("slinger.$$")
+sockname = "slinger.$$"
+socktmp  = sockname + ".tmp"
+bind(socktmp)
 listen()
+rename(socktmp, sockname)
 sd = accept()  # blocks waiting for socket to be caught.
 sendmsg(sd, 0) # send stdin, which is really bidirectional.
 exit(success)
@@ -26,7 +29,6 @@ Usage examples:
   sling-catch -s sockname -i         # attach to stdio
   sling-catch -s sockname -i -- cat  # attach to stdio and exec cat
 
-  (initially, only bother with first usage)
 
 Operation:
 ------------
@@ -61,14 +63,17 @@ Usage example:
     tmux new-window -- sling-catch -s $sock -- socat FD:5 STDIO
   done
 
+  sling-catch "$(sling-watch -n 1)"
+
+
 Operation:
 ------------
 dir = opendir(runtime_dir)
 for entry in dir:
     if is_sock(entry):
         print(entry)
-watcher = inotify(runtime_dir, IN_CREATE)
+watcher = inotify(runtime_dir, IN_CREATE|IN_MOVED_TO)
 while (entry = next(watcher)):
-    if (is_sock(entry)):
+    if (is_sock(entry) && !entry.ends_with(".tmp")):
         print(entry)
 ------------

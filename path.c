@@ -19,7 +19,7 @@
 /* Return the user's home directory.  Prefer $HOME, but fallback to the passwd
  * entry.
  */
-char *get_home(void) {
+const char *get_home(void) {
     char *homedir = getenv("HOME");
 
     if (!homedir) {
@@ -65,9 +65,9 @@ static inline void _make_my_dir(const char *path) {
  * If $XDG_CACHE_HOME does not exist, then a .cache subdirectory under $HOME
  * will be chosen.
  *
- * This value is cached and must not be freed.
+ * This value is cached and must not be freed or modified.
  */
-char *get_xdg_cache_dir(void) {
+const char *get_xdg_cache_dir(void) {
     static char *xdg_cache;
     char *tmp_cache;
 
@@ -93,11 +93,11 @@ char *get_xdg_cache_dir(void) {
  *
  * XXX: move to minilib
  *
- * This value is cached and must not be freed.
+ * This value is cached and must not be freed or modified.
  */
-char *get_xdg_runtime_dir(void) {
-    static char *xdg_runtime;
-    char *tmp_runtime;
+const char *get_xdg_runtime_dir(void) {
+    static const char *xdg_runtime;
+    const char *tmp_runtime;
 
     if (xdg_runtime)
         return xdg_runtime;
@@ -115,12 +115,12 @@ char *get_xdg_runtime_dir(void) {
     return xdg_runtime;
 }
 
-/* Return the socket slinger runtime dir.  The path is created (best effort) if it
- * doesn't exist.
+/* Return the socket slinger runtime dir.  The path is created (best effort)
+ * if it doesn't exist.
  *
- * This value is cached and must not be freed.
+ * This value is cached and must not be freed or modified.
  */
-char *get_runtime_dir(void) {
+const char *get_runtime_dir(void) {
     static char *runtime_dir;
     char *tmp_runtime;
 
@@ -166,15 +166,13 @@ int build_socket_path_pid(lx_s *dest, pid_t pid) {
 
 
 int build_socket_path_name(lx_s *dest, const char *socketname) {
-    char *runtime_dir = get_runtime_dir();
-
     if (index(socketname, '/')) {
         fprintf(stderr, "socket name can't contain path elements.\n");
         errno = EINVAL;
         return 1;
     }
 
-    if (lx_strset(dest, runtime_dir) ||
+    if (lx_strset(dest, get_runtime_dir()) ||
         lx_cadd(dest, '/') ||
         lx_stradd(dest, socketname))
         return 1;

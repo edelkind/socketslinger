@@ -30,8 +30,8 @@ static inline int _socket_attach(
     return sock;
 }
 
-/* Open unix domain socket with the supplied path (which has the supplied len).
- * If len is longer than (sun_path-1), it will be truncated.
+/* Open unix domain socket with the supplied path (which has the supplied
+ * len).  If len is longer than (sun_path-1), it will be truncated.
  *
  * Return value is the same as for socket(2).
  */

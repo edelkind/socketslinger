@@ -64,7 +64,8 @@ void sig_handle(int sig) {
 }
 
 int main(int argc, char **argv) {
-    lx_s sockpath = {0};
+    lx_s sockpath = {0},
+         socktmp = {0};
     int sock_listen, sock_conn;
     char **args;
     int argn;
@@ -75,10 +76,8 @@ int main(int argc, char **argv) {
         usage();
 
 
-    if (build_socket_path_pid(&sockpath, getpid())) {
-        perror("build_socket_path_pid");
-        return 1;
-    }
+    if (build_socket_path_pid(&sockpath, getpid()))
+        die_err(1, "build_socket_path_pid");
 
     /* Any of these signals should result in the socket being cleaned up.
      * This will also cause accept() to fail with error EINTR, but that's
@@ -90,14 +89,30 @@ int main(int argc, char **argv) {
     sig_catch(SIGTERM, sig_handle);
     sig_catch(SIGHUP, sig_handle);
 
-    (void) unlink(lx_cstr(&sockpath));
-    sock_listen = socket_listener(sockpath.s, sockpath.len);
+    /* To avoid a race condition with the watcher/catcher between bind() and
+     * listen() calls, the socket is initially created with a .tmp suffix,
+     * then renamed once the socket is being listened on.  The watcher will
+     * ignore sockets with a .tmp suffix and will trigger on the rename.
+     */
+    if (lx_alloc(&socktmp, sockpath.len + 4))
+        die_err(1, "lx_alloc");
+
+    // alloc succeeded, so no failure case
+    (void) lx_strcopy(&socktmp, &sockpath);
+    (void) lx_striadd(&socktmp, ".tmp", 4);
+
+    (void) unlink(lx_cstr(&socktmp));
+    sock_listen = socket_listener(socktmp.s, socktmp.len);
     if (sock_listen < 0) {
-        perror("socket_listener");
-        unlink(lx_cstr(&sockpath));
-        return 1;
+        (void) unlink(lx_cstr(&socktmp));
+        die_err(1, "socket_listener");
+    }
+    if (rename(lx_cstr(&socktmp), lx_cstr(&sockpath))) {
+        (void) unlink(socktmp.s);
+        die_err(1, "rename(%s, %s)", socktmp.s, sockpath.s);
     }
 
+    lx_free(&socktmp);
 
     sock_conn = accept(sock_listen, NULL, NULL);
     unlink(lx_cstr(&sockpath));  // cleanup
@@ -105,40 +120,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-
-//    struct sockaddr_un sa;
-//    memset(&sa, 0, sizeof(sa));
-//    sa.sun_family = AF_UNIX;
-//    if (socklen >= (sizeof(sa.sun_path))) {
-//        fprintf(stderr, "Socket path (%s) too long (%ld > %lu).\n",
-//                sockpath, socklen, sizeof(sa.sun_path) - 1);
-//        exit(1);
-//    }
-//    memcpy(sa.sun_path, sockpath, socklen); /* \0 already present */
-//
-//    sock_conn = socket(AF_UNIX, SOCK_SEQPACKET, 0);
-//    if (sock_conn == -1) {
-//        perror("socket");
-//        exit(1);
-//    }
-//
-//
-//
-//    for (unsigned tries = 0;; tries++) {
-//        if (!connect(sock_conn, (struct sockaddr *)&sa, sizeof(sa)))
-//            break;
-//        if (errno == ECONNREFUSED) {
-//            if (!(tries % 10))
-//                fprintf(stderr, "Waiting for catcher to listen on socket...\n");
-//            sleep(1);
-//            continue;
-//        }
-//        perror("connect");
-//        exit(1);
-//    }
-
-//    if (desc_write(sock_conn, "", 1, 0) == -1 ||
-//        desc_write(sock_conn, "", 1, 1) == -1) {
     if (desc_write(sock_conn, "", 1, opt_descriptor.v_opt.opt_int) == -1) {
         perror("desc_write");
         exit(1);
