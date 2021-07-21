@@ -1,3 +1,7 @@
 *.o
 sling-catch
 sling-input
+sling-watch
+get_opts
+lx_lib
+minilib
