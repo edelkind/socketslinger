@@ -60,10 +60,10 @@ sling-watch
 
 Usage example:
   sling-watch | while read sock; do
-    tmux new-window -- sling-catch -s $sock -- socat FD:5 STDIO
+    tmux new-window -- sling-catch -s "$sock" -- socat FD:5 STDIO
   done
 
-  sling-catch "$(sling-watch -n 1)"
+  sling-catch -s "$(sling-watch -n 1)" -- ...
 
 
 Operation:
