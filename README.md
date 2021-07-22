@@ -36,7 +36,7 @@ There are some things that you can do with this aside from serving a Frankenstei
 ```bash
 socat TCP4-LISTEN:13337,fork,reuseaddr EXEC:sling-input,nofork &
 
-sling-wait |while read sock; do
+sling-watch |while read sock; do
   tmux new-window -- sling-catch -c -s "$sock" -- socat FD:5 STDIO
 done
 ```
@@ -52,12 +52,12 @@ socat TCP4-LISTEN:13337,fork,reuseaddr EXEC:sling-input,nofork &
 `sling-input` creates a Unix domain socket and listens for a connection.  Since a new process is spawned for each connection, a different Unix domain socket needs to be created for every connection as well (in the hypothetical/unimplemented `sling-listen` scenario above, the same Unix domain socket can be reused, which would be slightly more efficient).  The `sling-input` process will block until another process connects to the Unix domain socket.  In the meantime, `socat` can continue to serve additional connections and spawn new `sling-input` processes.
 
 ```bash
-sling-wait |while read sock; do
+sling-watch |while read sock; do
   tmux new-window -- sling-catch -c -s "$sock" -- socat FD:5 STDIO
 done
 ```
 
-`sling-wait` cycles through any existing sockets in the runtime directory, outputting their names one per line, then it watches for new sockets using inotify.  Notification delay is minimal (measured in nanoseconds on most remotely modern hardware), so in the process above, the biggest inefficiencies occur in cycling through the shell loop and spawning the subprocesses.
+`sling-watch` cycles through any existing sockets in the runtime directory, outputting their names one per line, then it watches for new sockets using inotify.  Notification delay is minimal (measured in nanoseconds on most remotely modern hardware), so in the process above, the biggest inefficiencies occur in cycling through the shell loop and spawning the subprocesses.
 
 In the new `tmux` window (a `tmux` server must already be running), `sling-catch` connects to the supplied Unix domain socket, and `sling-input` passes the descriptor, deletes the Unix domain socket, and exits immediately (without closing the descriptor).
 
@@ -65,18 +65,18 @@ At this point, on the listener end, the only thing running is the one `socat` li
 
 `sling-catch` executes `socat` (since the hypothetical scenario where `sling-catch` implements built-in stdio redirection hasn't been implemented) without forking, and `socat` then utilizes the descriptor and relays content to/from stdio for display in `tmux`.
 
-At this point, on the catcher end, the only thing running is one `socat` process (plus `sling-wait` and our shell loop).
+At this point, on the catcher end, the only thing running is one `socat` process (plus `sling-watch` and our shell loop).
 
 For one connection, the number of persistent processes is 5:
 - 1 `socat` TCP listener
-- 1 `sling-wait` filesystem watcher
+- 1 `sling-watch` filesystem watcher
 - 1 shell loop
 - 1 `tmux` server
 - 1 `socat` communication processor
 
 For 51 connections, the number of persistent processes is 55:
 - 1 `socat` TCP listener
-- 1 `sling-wait` filesystem watcher
+- 1 `sling-watch` filesystem watcher
 - 1 shell loop
 - 1 `tmux` server
 - 51 `socat` communication processors
