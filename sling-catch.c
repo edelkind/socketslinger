@@ -1,5 +1,7 @@
+#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +10,7 @@
 #include <unistd.h>
 
 #include <get_opts.h>
+#include <minimisc.h>
 
 #include "defaults.h"
 #include "descriptor.h"
@@ -22,6 +25,7 @@ void usage(void) {
 "  -c, --cleanup       Clean up (remove) old sockets\n"
 "  -d, --descriptor D  Descriptor number to use (default 5)\n"
 "  -i, --stdio         Redirect or relay from/to stdin/stdout\n"
+"  -N, --peername      Call getpeername(2) and print to stderr\n"
 "  -h, --help          Display usage help\n");
     exit(1);
 }
@@ -31,11 +35,12 @@ add_opt(opt_sockname,   "s",  "sockname", OPT_STRING, (opt_string_t)0, 0);
 add_opt(opt_descriptor, "d",  "descriptor", OPT_INT, (opt_int_t)5, 0);
 add_opt(opt_stdio,      "i",  "stdio", OPT_TOGGLE, (opt_toggle_t)0, 0); // TODO
 add_opt(opt_clean,      "c",  "cleanup", OPT_TOGGLE, (opt_toggle_t)0, 0);
+add_opt(opt_peername,   "N",  "peername", OPT_TOGGLE, (opt_toggle_t)0, 0);
 add_opt(opt_help,       "h",  "help", OPT_TOGGLE, (opt_toggle_t)0, 0);
 
 
 put_opts(options, &opt_sockname, &opt_descriptor, &opt_stdio, &opt_clean,
-        &opt_help);
+        &opt_peername, &opt_help);
 
 
 static inline void set_fd(int dfrom, int dto) {
@@ -59,6 +64,17 @@ static inline int opts_validate(void) {
     }
 
     return 0;
+}
+
+void print_peername(int sd) {
+    struct sockaddr_in sa;
+    socklen_t salen = sizeof(sa);
+    if (getpeername(sd, (struct sockaddr *)&sa, &salen)) {
+        warn_err("getpeername");
+        return;
+    }
+
+    fprintf(stderr, "Peer socket: %s:%d\n", inet_ntoa(sa.sin_addr), htons(sa.sin_port));
 }
 
 int main(int argc, char **argv) {
@@ -92,6 +108,9 @@ int main(int argc, char **argv) {
             exit(1);
         }
     }
+
+    if (opt_peername.v_opt.opt_toggle)
+        print_peername(d_io);
 
     if (opt_stdio.v_opt.opt_toggle && argn) {
         /* --stdio AND exec */
