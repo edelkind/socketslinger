@@ -19,7 +19,7 @@ sling-catch [processor]
 
 One operates on stdin/stdout and can, for example, be invoked via `socat`*:
 ```
-socat TCP4-LISTEN:12.34.56.78:8888 EXEC:sling-input
+socat TCP4-LISTEN:8888 EXEC:sling-input
 
 sling-catch [processor]
 ```
@@ -34,7 +34,7 @@ The latter is the version currently implemented.  Some features are currently Li
 There are some things that you can do with this aside from serving a Frankensteinian network service.  As one example, you can combine it with `tmux` to build a reverse shell manager for security testing:
 
 ```bash
-socat TCP4-LISTEN:12.34.56.78:13337,fork,reuseaddr EXEC:sling-input,nofork &
+socat TCP4-LISTEN:13337,fork,reuseaddr EXEC:sling-input,nofork &
 
 sling-wait |while read sock; do
   tmux new-window -- sling-catch -c -s "$sock" -- socat FD:5 STDIO
@@ -44,7 +44,7 @@ done
 Let's break down what happens in this configuration.
 
 ```bash
-socat TCP4-LISTEN:12.34.56.78:13337,fork,reuseaddr EXEC:sling-input,nofork &
+socat TCP4-LISTEN:13337,fork,reuseaddr EXEC:sling-input,nofork &
 ```
 
 `socat` runs as a network service.  When a new connection arrives, `socat` forks and passes the network descriptor to `sling-input`, as descriptor 0 (duped as necessary to mimic console stdio).  `socat` does not fork further to execute `sling-input`.  This is important because we need to ensure that socat doesn't close the descriptor when `sling-input` exits.
